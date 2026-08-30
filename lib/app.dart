@@ -1,3 +1,5 @@
+// dadflix:
+import 'dadflix/dadflix_feed_service.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -76,6 +78,7 @@ class _MoonfinAppState extends State<MoonfinApp> {
   @override
   void initState() {
     super.initState();
+    print('dadflix: MoonfinApp initState');
     _prefs = GetIt.instance<UserPreferences>();
     _themeController = AppThemeController.fromPreferences(_prefs);
     _lastResolvedLocale = _resolveLocale();
@@ -117,6 +120,19 @@ class _MoonfinAppState extends State<MoonfinApp> {
     // OS-registered moonfin:// links. The service no-ops on platforms without
     // an app_links backend.
     _deepLinks.startListener(navigateWhenReady);
+    // dadflix: Spark satirlarini Home Sections'a (yoksa) ekle. DI ve oturum
+    // initState aninda hazir olmayabilir; gecikmeli ve tekrarli dene.
+    unawaited(() async {
+      for (var attempt = 1; attempt <= 5; attempt++) {
+        await Future<void>.delayed(Duration(seconds: 8 * attempt));
+        try {
+          await GetIt.instance<DadflixFeedService>().ensureHomeSections();
+          return;
+        } catch (e) {
+          print('dadflix: init deneme $attempt basarisiz: $e');
+        }
+      }
+    }());
   }
 
   void _syncThemeFromPrefs() {

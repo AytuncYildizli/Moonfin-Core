@@ -1,4 +1,5 @@
 // dadflix: izole katman importlari
+import '../../dadflix/dadflix_feed_service.dart';
 import '../../dadflix/dadflix_api.dart';
 import '../../dadflix/dadflix_preferences.dart';
 import 'package:get_it/get_it.dart';
@@ -158,6 +159,7 @@ void registerAppModule() {
     ),
   );
   _getIt.registerLazySingleton(() => DadflixApi(_getIt<DadflixPreferences>()));
+  _getIt.registerLazySingleton(() => DadflixFeedService(_getIt<DadflixPreferences>()));
   _getIt.registerLazySingleton<PendingRatingStore>(
     () => PendingRatingStore(_getIt<PreferenceStore>()),
   );

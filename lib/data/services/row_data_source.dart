@@ -1,3 +1,5 @@
+// dadflix:
+import '../../dadflix/dadflix_feed_service.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -2020,6 +2022,15 @@ class RowDataSource {
         }
 
       case HomeSectionPluginSource.custom:
+        // dadflix: 'dadflix_feed:*' bolumleri denizevi feed'inden yuklenir
+        if (DadflixFeedService.isDadflixSection(section)) {
+          return GetIt.instance<DadflixFeedService>().loadRow(
+            rowId: rowId,
+            title: title,
+            section: section,
+            forceRefresh: forceRefresh,
+          );
+        }
         try {
           final customService = GetIt.instance<CustomExternalListsService>();
           final config = HomeSectionConfig.pluginDynamic(
