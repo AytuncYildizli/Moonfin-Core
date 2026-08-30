@@ -73,7 +73,14 @@ class _DadflixSportsScreenState extends State<DadflixSportsScreen> {
           'MaxStartDate':
               now.add(const Duration(hours: 36)).toIso8601String(),
           'SortBy': 'StartDate',
-          'Limit': 400,
+          // Saglayici EPG'si spor kanallarina kanal-adi DOLGU programlari basar
+          // (4 saatlik bloklar); Jellyfin bunlari kanal grubundan IsSports sayar
+          // ve 36 saatlik pencerede ~1500 kayit olusur. 400 limitinde liste ilk
+          // ~9 saatte doluyor, aksam maclari DISARIDA kaliyordu (2026-08-30:
+          // 6 gercek mac 730-851. siralardaydi). Dolgular sunucuda temizlenemez
+          // (kategori tasimiyorlar), bu yuzden pencerenin tamamini cekiyoruz;
+          // ayiklama zaten istemcide yapiliyor.
+          'Limit': 2500,
           'EnableImages': false,
           'EnableUserData': false,
         },
