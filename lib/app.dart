@@ -125,7 +125,10 @@ class _MoonfinAppState extends State<MoonfinApp> {
       for (var attempt = 1; attempt <= 5; attempt++) {
         await Future<void>.delayed(Duration(seconds: 8 * attempt));
         try {
-          await GetIt.instance<DadflixFeedService>().ensureHomeSections();
+          final feed = GetIt.instance<DadflixFeedService>();
+          await feed.ensureHomeSections();
+          // Moonbase senkronu satirlari dibe atarsa geri cek.
+          feed.startLayoutGuard();
           return;
         } catch (e) {
           print('dadflix: init deneme $attempt basarisiz: $e');
