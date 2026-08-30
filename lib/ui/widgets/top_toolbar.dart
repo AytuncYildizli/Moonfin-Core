@@ -1073,6 +1073,22 @@ class _TopToolbarState extends State<TopToolbar> with RouteAware {
                   ),
                 ),
               ],
+              // dadflix: spor sayfasi
+              _gap(),
+              _orderButton(
+                order: (order++).toDouble(),
+                child: ExpandableIconButton(
+                  key: const ValueKey('toolbar_dadflix_sports'),
+                  forceExpanded: alwaysExpanded,
+                  icon: Icons.sports_soccer_rounded,
+                  label: 'Spor',
+                  baseColor: nextNavColor(),
+                  onPressed: () {
+                    if (_isActive(Destinations.dadflixSports)) return;
+                    context.navigateTopLevel(Destinations.dadflixSports);
+                  },
+                ),
+              ),
               // dadflix: Live TV her zaman toolbar'da ayri ikon olarak gorunur
               // (kutuphaneler menusunde gomulu kalmasin diye; pref eklemiyoruz
               // ki upstream user_preferences.dart'a dokunulmasin).

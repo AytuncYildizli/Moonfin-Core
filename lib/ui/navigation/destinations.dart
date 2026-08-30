@@ -99,6 +99,8 @@ class Destinations {
   static const liveTvRecordings = '/live-tv/recordings';
   static const liveTvSeriesRecordings = '/live-tv/series-recordings';
   static const liveTvPlayer = '/live-tv/player';
+  // dadflix:
+  static const dadflixSports = '/dadflix/sports';
 
   // Playback
   static const videoPlayer = '/player/video';

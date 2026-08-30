@@ -1,3 +1,5 @@
+// dadflix:
+import '../../dadflix/dadflix_sports_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
@@ -130,6 +132,7 @@ bool _shouldRunSetupWizard() {
 /// against the downloads catalog.
 bool _isOfflineBlocked(String path) {
   return path.startsWith('/live-tv') ||
+      path.startsWith('/dadflix/sports') ||
       path.startsWith('/seerr') ||
       path.startsWith('/admin') ||
       path.startsWith('/games');
@@ -227,6 +230,11 @@ final appRouter = GoRouter(
     return null;
   },
   routes: [
+    // dadflix: mac-odakli spor sayfasi
+    GoRoute(
+      path: Destinations.dadflixSports,
+      builder: (context, state) => const DadflixSportsScreen(),
+    ),
     // Auth
     GoRoute(
       path: Destinations.startup,

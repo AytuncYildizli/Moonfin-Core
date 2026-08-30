@@ -1,3 +1,6 @@
+// dadflix:
+import '../../../dadflix/dadflix_api.dart';
+import '../../../dadflix/dadflix_verdict_overlay.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -214,6 +217,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _skipSegmentAutoHidePending = false;
   Timer? _skipSegmentAutoHideTimer;
   bool _showNextUp = false;
+  // dadflix: film-sonu verdict overlay durumu
+  bool _dadflixShowVerdict = false;
+  AggregatedItem? _dadflixVerdictItem;
+  String? _dadflixVerdictShownForItemId;
+  bool _dadflixPendingExitAfterVerdict = false;
+  Duration _dadflixWatched = Duration.zero;
+  Duration _dadflixLastPos = Duration.zero;
   AggregatedItem? _nextUpItem;
   bool _nextUpDismissed = false;
   bool _isNextUpAdvancing = false;
@@ -731,6 +741,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _positionSub = _state.positionStream.listen(_onPositionUpdate);
     _completedSub = _manager.sessionEndedStream.listen((_) {
       if (!mounted || _isStopping) return;
+      // dadflix: verdict ekrandayken cikisi oy verilene kadar beklet
+      if (_dadflixShowVerdict) {
+        _dadflixPendingExitAfterVerdict = true;
+        return;
+      }
       unawaited(_exitPlayback());
     });
     _backendSub = _manager.backendChangedStream.listen((backend) {
@@ -795,6 +810,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _resetSkipSegmentAutoHide();
       setState(() {
         _nextUpDismissed = false;
+        _dadflixShowVerdict = false;
+        _dadflixVerdictItem = null;
+        _dadflixVerdictShownForItemId = null;
+        _dadflixWatched = Duration.zero;
+        _dadflixLastPos = Duration.zero;
         _showNextUp = false;
         _skipSegment = null;
         // Stream indexes belong to the file they came from, so the next item
@@ -2179,6 +2199,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     _checkSegments(position);
     _checkNextUp(position);
+    _dadflixCheckVerdict(position);
   }
 
   void _syncAirPlayPlaybackState({Duration? position}) {
@@ -2294,6 +2315,52 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _focusTvSkipSegment();
     } else if (result.isNone && _skipSegment != null) {
       _clearSkipSegment();
+    }
+  }
+
+  // dadflix: filmin %92'si GERCEKTEN izlendiyse (seek degil, kumulatif)
+  // bir kez verdict overlay'i ac; oy concierge'e yazilir, Spark beslenir.
+  void _dadflixCheckVerdict(Duration position) {
+    final delta = position - _dadflixLastPos;
+    if (delta > Duration.zero && delta < const Duration(seconds: 2)) {
+      _dadflixWatched += delta;
+    }
+    _dadflixLastPos = position;
+    if (_dadflixShowVerdict || _dadflixVerdictShownForItemId != null) return;
+    if (_isCurrentPreroll || _showNextUp) return;
+    final duration = _state.duration;
+    if (duration <= Duration.zero) return;
+    final item = _queue.currentItem;
+    if (item is! AggregatedItem || item.type != 'Movie') return;
+    final posRatio = position.inMilliseconds / duration.inMilliseconds;
+    final watchedRatio = _dadflixWatched.inMilliseconds / duration.inMilliseconds;
+    if (posRatio < 0.92 || watchedRatio < 0.60) return;
+    setState(() {
+      _dadflixShowVerdict = true;
+      _dadflixVerdictItem = item;
+      _dadflixVerdictShownForItemId = item.id;
+    });
+  }
+
+  void _dadflixResolveVerdict(bool? thumbsUp) {
+    final item = _dadflixVerdictItem;
+    if (thumbsUp != null && item != null) {
+      unawaited(
+        GetIt.instance<DadflixApi>().postVerdict(
+          itemId: item.id,
+          title: item.name ?? '',
+          thumbsUp: thumbsUp,
+          isMovie: true,
+        ),
+      );
+    }
+    setState(() {
+      _dadflixShowVerdict = false;
+      _dadflixVerdictItem = null;
+    });
+    if (_dadflixPendingExitAfterVerdict) {
+      _dadflixPendingExitAfterVerdict = false;
+      unawaited(_exitPlayback());
     }
   }
 
@@ -3787,6 +3854,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                         dismissFocusNode: PlatformDetection.isTV
                             ? _tvNextUpDismissFocus
                             : null,
+                      ),
+                    // dadflix: film-sonu verdict
+                    if (_dadflixShowVerdict && _dadflixVerdictItem != null)
+                      DadflixVerdictOverlay(
+                        title: _dadflixVerdictItem!.name ?? '',
+                        onThumbsUp: () => _dadflixResolveVerdict(true),
+                        onThumbsDown: () => _dadflixResolveVerdict(false),
+                        onDismiss: () => _dadflixResolveVerdict(null),
                       ),
                   ],
                 ),
