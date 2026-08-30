@@ -78,7 +78,6 @@ class _MoonfinAppState extends State<MoonfinApp> {
   @override
   void initState() {
     super.initState();
-    print('dadflix: MoonfinApp initState');
     _prefs = GetIt.instance<UserPreferences>();
     _themeController = AppThemeController.fromPreferences(_prefs);
     _lastResolvedLocale = _resolveLocale();

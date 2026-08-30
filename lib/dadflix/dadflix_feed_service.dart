@@ -189,10 +189,38 @@ class DadflixFeedService {
           add(id, (r['title'] as String?) ?? id, tailOrder++);
         }
       }
-      if (added > 0) {
+      // Bir kerelik yerlesim: Spark kisisel satiri en uste (CW+NU'dan sonra),
+      // kesif satirlari blok halinde kutuphane satirlarinin arkasina.
+      // Kullanicinin Home Sections'taki elle duzenlemeleri sonraki
+      // acilislarda ezilmesin diye surumlu bayrakla korunur.
+      final layoutDone = _prefs.layoutVersion >= 1;
+      if (!layoutDone) {
+        configs.sort((a, b) => a.order.compareTo(b.order));
+        final dadflix = configs
+            .where((c) => isDadflixSection(c.pluginSection))
+            .toList();
+        configs.removeWhere((c) => isDadflixSection(c.pluginSection));
+        HomeSectionConfig? take(String rowId) {
+          final idx = dadflix.indexWhere(
+            (c) => c.pluginSection == '$_sectionPrefix$rowId',
+          );
+          return idx < 0 ? null : dadflix.removeAt(idx);
+        }
+
+        final fresh = take('personalized-fresh');
+        // Kisisel satir: liste basina yakin (CW/NU ilk iki sirada kalir).
+        if (fresh != null) configs.insert(configs.length < 3 ? configs.length : 3, fresh);
+        // Kesif blogu: sona degil, mevcutlarin arkasina toplu.
+        configs.addAll(dadflix);
+        for (var i = 0; i < configs.length; i++) {
+          configs[i] = configs[i].copyWith(order: i);
+        }
+        await prefs.setHomeSectionsConfig(configs);
+        await _prefs.setLayoutVersion(1);
+      } else if (added > 0) {
         await prefs.setHomeSectionsConfig(configs);
       }
-      print('dadflix: feed satirlari eklendi=$added toplam=${configs.length}');
+      print('dadflix: feed satirlari eklendi=$added toplam=${configs.length} layout=${layoutDone ? "korundu" : "v1 uygulandi"}');
     } catch (e) {
       print('dadflix: ensureHomeSections hata: $e');
     }

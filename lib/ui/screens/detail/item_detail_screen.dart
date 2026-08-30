@@ -12748,7 +12748,7 @@ Widget? _dadflixDebridButton(
 }) {
   if (seerr == null) return null;
   final state = seerr.state;
-  if (!state.isMovie) return null;
+  if (!state.isMovie && !state.isTv) return null;
   if (state.isAvailableAnyQuality) return null;
   final prefs = GetIt.instance<DadflixPreferences>();
   if (!prefs.isConfigured) return null;
@@ -12758,33 +12758,104 @@ Widget? _dadflixDebridButton(
     isPrimary: isPrimary,
     focusNode: focusNode,
     autofocus: autofocus,
-    onPressed: () => unawaited(_dadflixStartDebrid(context, state)),
+    onPressed: () => state.isMovie
+        ? unawaited(_dadflixStartDebrid(context, state))
+        : unawaited(_dadflixPickEpisodeAndPlay(context, state)),
+  );
+}
+
+/// Dizi icin iki adimli secici: sezon -> bolum, sonra debrid oynatma.
+Future<void> _dadflixPickEpisodeAndPlay(
+  BuildContext context,
+  SeerrMediaDetailState state,
+) async {
+  final seasons = (state.tv?.seasons ?? const [])
+      .where((s) => s.seasonNumber > 0)
+      .toList();
+  if (seasons.isEmpty) {
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      const SnackBar(content: Text('Sezon bilgisi bulunamadı.')),
+    );
+    return;
+  }
+  final season = seasons.length == 1
+      ? seasons.first
+      : await showDialog<dynamic>(
+          context: context,
+          builder: (ctx) => SimpleDialog(
+            title: const Text('Sezon seç'),
+            children: [
+              for (final se in seasons)
+                SimpleDialogOption(
+                  onPressed: () => Navigator.of(ctx).pop(se),
+                  child: Text(
+                    '${se.name ?? 'Sezon ${se.seasonNumber}'}'
+                    '${se.episodeCount != null ? ' · ${se.episodeCount} bölüm' : ''}',
+                  ),
+                ),
+            ],
+          ),
+        );
+  if (season == null || !context.mounted) return;
+  final count = (season.episodeCount as int?) ?? 24;
+  final episode = await showDialog<int>(
+    context: context,
+    builder: (ctx) => SimpleDialog(
+      title: Text('Bölüm seç (S${season.seasonNumber})'),
+      children: [
+        SizedBox(
+          width: 420,
+          height: 320,
+          child: GridView.count(
+            crossAxisCount: 6,
+            shrinkWrap: true,
+            children: [
+              for (var e = 1; e <= count; e++)
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(e),
+                  child: Text('$e'),
+                ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+  if (episode == null || !context.mounted) return;
+  await _dadflixStartDebrid(
+    context,
+    state,
+    season: season.seasonNumber as int,
+    episode: episode,
   );
 }
 
 Future<void> _dadflixStartDebrid(
   BuildContext context,
-  SeerrMediaDetailState state,
-) async {
+  SeerrMediaDetailState state, {
+  int? season,
+  int? episode,
+}) async {
   final messenger = ScaffoldMessenger.maybeOf(context);
   void toast(String msg) =>
       messenger?.showSnackBar(SnackBar(content: Text(msg)));
 
-  print('dadflix: debrid basladi');
   toast('Debrid kaynağı aranıyor…');
   final api = GetIt.instance<DadflixApi>();
   final date = state.releaseDate ?? state.firstAirDate;
   final year = date != null && date.length >= 4
       ? int.tryParse(date.substring(0, 4))
       : null;
+  final isTv = season != null && episode != null;
   final result = await api.playDebrid(
     tmdbId: state.tmdbId,
     imdbId: state.externalIds?.imdbId,
-    mediaType: 'movie',
+    mediaType: isTv ? 'tv' : 'movie',
     title: state.displayTitle,
     year: year,
+    season: season,
+    episode: episode,
   );
-  print('dadflix: sonuc granted=${result?.granted} url=${result?.url != null}');
   if (!context.mounted) return;
   if (result == null) {
     toast('Debrid kaynağı bulunamadı — istek akışını kullanabilirsin.');
@@ -12796,11 +12867,17 @@ Future<void> _dadflixStartDebrid(
   }
 
   final item = AggregatedItem(
-    id: 'debrid:tmdb:${state.tmdbId}',
+    id: isTv
+        ? 'debrid:tmdb:${state.tmdbId}:s$season:e$episode'
+        : 'debrid:tmdb:${state.tmdbId}',
     serverId: 'debrid',
     rawData: {
-      'Name': state.displayTitle,
-      'Type': 'Movie',
+      'Name': isTv
+          ? '${state.displayTitle} S${season}B$episode'
+          : state.displayTitle,
+      'Type': isTv ? 'Episode' : 'Movie',
+      if (isTv) 'ParentIndexNumber': season,
+      if (isTv) 'IndexNumber': episode,
       'MediaType': 'Video',
       'ProviderIds': {
         'Tmdb': '${state.tmdbId}',
@@ -12816,7 +12893,6 @@ Future<void> _dadflixStartDebrid(
     },
   );
 
-  print('dadflix: oynatici aciliyor');
   final manager = GetIt.instance<PlaybackManager>();
   await launchPlayerWhilePreparing(
     context,

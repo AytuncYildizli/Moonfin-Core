@@ -36,4 +36,22 @@ class DadflixPreferences {
       _store.setString(_userKey('api_key'), value.trim());
 
   bool get isConfigured => apiKey.isNotEmpty && baseUrl.isNotEmpty;
+
+  /// Uygulanan ana-ekran yerlesim surumu (bir-kerelik duzen tasima bayragi).
+  int get layoutVersion => _store.getInt(_userKey('layout_version')) ?? 0;
+  Future<void> setLayoutVersion(int value) =>
+      _store.setInt(_userKey('layout_version'), value);
+
+  /// Concierge servisi adresi (verdict yazma yolu).
+  String get conciergeUrl =>
+      _store.getString(_userKey('concierge_url')) ??
+      'http://192.168.1.105:8086';
+
+  /// Concierge (:8086) yazma anahtari — verdict overlay POST'lari icin.
+  static const String _builtInConciergeKey =
+      String.fromEnvironment('DADFLIX_CONCIERGE_KEY');
+  String get conciergeKey {
+    final stored = _store.getString(_userKey('concierge_key')) ?? '';
+    return stored.isNotEmpty ? stored : _builtInConciergeKey;
+  }
 }

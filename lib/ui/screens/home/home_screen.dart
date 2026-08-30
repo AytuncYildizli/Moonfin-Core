@@ -1,3 +1,5 @@
+// dadflix:
+import '../../../dadflix/dadflix_feed_service.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
@@ -3904,6 +3906,10 @@ class _ContentRowsState extends State<_ContentRows>
     if (row.id.startsWith('imdb_')) return 'IMDb List';
 
     final config = widget.prefs.homeSectionsConfig.firstWhereOrNull((c) => c.stableId == row.id);
+    // dadflix: feed satirlari kendi markasini tasir
+    if (config != null && DadflixFeedService.isDadflixSection(config.pluginSection)) {
+      return 'Dadflix';
+    }
     if (config != null && config.pluginSource == HomeSectionPluginSource.custom) {
       Map<String, dynamic> rowConfig = {};
       try {

@@ -75,6 +75,33 @@ class DadflixApi {
     }
   }
 
+  /// Film/bolum sonu verdict'i (begendi/begenmedi) concierge'e yazar.
+  /// webOS moonfin'in postVerdict sozlesmesiyle birebir; hata sessiz gecilir
+  /// (verdict kaydi oynatma deneyimini asla bloklamaz).
+  Future<void> postVerdict({
+    required String itemId,
+    required String title,
+    required bool thumbsUp,
+    required bool isMovie,
+  }) async {
+    final key = _prefs.conciergeKey;
+    if (key.isEmpty) return;
+    try {
+      await _dio.post<void>(
+        '${_prefs.conciergeUrl}/api/verdicts',
+        data: {
+          'itemId': itemId,
+          'title': title,
+          'verdict': thumbsUp ? 'up' : 'down',
+          'source': 'overlay',
+          'mediaType': isMovie ? 'movie' : 'episode',
+          'room': 'firetv',
+        },
+        options: Options(headers: {'X-Concierge-Key': key}),
+      );
+    } catch (_) {}
+  }
+
   /// Hazirlanan (202) indirmenin durumunu yoklar; hata halinde null.
   Future<DebridStatus?> pollStatus(int torrentId) async {
     if (!_prefs.isConfigured) return null;
