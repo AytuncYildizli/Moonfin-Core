@@ -12769,6 +12769,38 @@ Future<void> _dadflixPickEpisodeAndPlay(
   BuildContext context,
   SeerrMediaDetailState state,
 ) async {
+  // Sunucudaki debrid ilerlemesi: "Sıradaki bölüm" tek dokunusla oynasin.
+  final next = await GetIt.instance<DadflixApi>().nextEpisode(state.tmdbId);
+  if (!context.mounted) return;
+  if (next != null && next.resumed) {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text('S${next.season}B${next.episode} ile devam?'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('Sıradaki bölümü oynat (S${next.season}B${next.episode})'),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Başka bölüm seç'),
+          ),
+        ],
+      ),
+    );
+    if (!context.mounted) return;
+    if (go == true) {
+      await _dadflixStartDebrid(
+        context,
+        state,
+        season: next.season,
+        episode: next.episode,
+      );
+      return;
+    }
+  }
+
   final seasons = (state.tv?.seasons ?? const [])
       .where((s) => s.seasonNumber > 0)
       .toList();

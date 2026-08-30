@@ -75,6 +75,28 @@ class DadflixApi {
     }
   }
 
+  /// Sunucudaki debrid ilerlemesine gore siradaki bolum. Kayit yoksa S1B1.
+  /// (Ilerleme sunucuda: cihaz sifirlansa da ayni yerden devam eder.)
+  Future<({int season, int episode, bool resumed})?> nextEpisode(int tmdbId) async {
+    if (!_prefs.isConfigured) return null;
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '${_prefs.baseUrl}/api/discover/next',
+        queryParameters: {'tmdbId': tmdbId},
+        options: _auth,
+      );
+      final d = res.data;
+      if (res.statusCode == 200 && d != null) {
+        return (
+          season: (d['season'] as num?)?.toInt() ?? 1,
+          episode: (d['episode'] as num?)?.toInt() ?? 1,
+          resumed: d['resumed'] == true,
+        );
+      }
+    } catch (_) {}
+    return null;
+  }
+
   /// Film/bolum sonu verdict'i (begendi/begenmedi) concierge'e yazar.
   /// webOS moonfin'in postVerdict sozlesmesiyle birebir; hata sessiz gecilir
   /// (verdict kaydi oynatma deneyimini asla bloklamaz).

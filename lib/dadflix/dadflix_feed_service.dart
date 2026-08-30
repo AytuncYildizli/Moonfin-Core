@@ -221,7 +221,10 @@ class DadflixFeedService {
   /// Ilk birkac kesif lane'i Live TV'den sonra, kutuphane satirlarindan ONCE:
   /// kullanici lane'leri aramak zorunda kalmasin.
   static const _topDiscoverySlot = 2;
-  static const _topDiscoveryCount = 4;
+  static const _topDiscoveryCount = 3;
+
+  /// Ayni anda acik tutulan kesif lane sayisi (konsey hedefi 6-10 gorunur satir).
+  static const _visibleDiscoveryCount = 6;
 
   /// Geri kalan kesif lane'leri kutuphane satirlarinin (latestMedia her
   /// kutuphane icin ayri satira aciliyor) arkasinda toplanir.
@@ -243,9 +246,16 @@ class DadflixFeedService {
     GetIt.instance<UserPreferences>().addListener(_onPreferencesChanged);
   }
 
+  Timer? _guardDebounce;
+
   void _onPreferencesChanged() {
     if (_enforcing) return;
-    unawaited(enforceLayout());
+    // Senkron tek turda birden cok tercih yazar; her tick'te liste yeniden
+    // kurmak 10-foot arayuzde jank ve odak kaymasi yapar (konsey uyarisi).
+    _guardDebounce?.cancel();
+    _guardDebounce = Timer(const Duration(milliseconds: 400), () {
+      unawaited(enforceLayout());
+    });
   }
 
   /// Dadflix satirlarini gorunur konuma tasir. Zaten yerindeyse hicbir sey
@@ -258,7 +268,7 @@ class DadflixFeedService {
       final configs = List<HomeSectionConfig>.from(prefs.homeSectionsConfig)
         ..sort((a, b) => a.order.compareTo(b.order));
       final ours = configs
-          .where((c) => isDadflixSection(c.pluginSection) && c.enabled)
+          .where((c) => isDadflixSection(c.pluginSection))
           .toList();
       if (ours.isEmpty) return;
 
@@ -267,7 +277,15 @@ class DadflixFeedService {
       final freshIdx = enabled.indexWhere(
         (c) => c.pluginSection == _freshRowSection,
       );
-      if (freshIdx >= 0 && freshIdx <= _freshTolerance) return;
+      // Fresh yerindeyse VE acik kesif sayisi hedefteyse dokunma.
+      final openDiscovery = ours
+          .where((c) => c.enabled && c.pluginSection != _freshRowSection)
+          .length;
+      if (freshIdx >= 0 &&
+          freshIdx <= _freshTolerance &&
+          openDiscovery == _visibleDiscoveryCount) {
+        return;
+      }
 
       final others = configs
           .where((c) => !isDadflixSection(c.pluginSection))
@@ -279,8 +297,22 @@ class DadflixFeedService {
           .where((c) => c.pluginSection != _freshRowSection)
           .toList();
 
-      final topDiscovery = discovery.take(_topDiscoveryCount).toList();
-      final restDiscovery = discovery.skip(_topDiscoveryCount).toList();
+      // Konsey (Grok/GLM 2026-08-31): 23 lane 10-foot arayuzde fazla; odak
+      // yolu uzuyor. Ilk _visibleDiscoveryCount kadari acik kalir, kalani
+      // KAPATILIR (silinmez: kullanici Ayarlar > Home Sections'tan acabilir,
+      // ileride Spark sirayi dondurdukce farkli lane'ler one gelir).
+      for (var i = 0; i < discovery.length; i++) {
+        final shouldEnable = i < _visibleDiscoveryCount;
+        if (discovery[i].enabled != shouldEnable) {
+          discovery[i] = discovery[i].copyWith(enabled: shouldEnable);
+        }
+      }
+      final visibleDiscovery =
+          discovery.where((c) => c.enabled).toList();
+      final hiddenDiscovery =
+          discovery.where((c) => !c.enabled).toList();
+      final topDiscovery = visibleDiscovery.take(_topDiscoveryCount).toList();
+      final restDiscovery = visibleDiscovery.skip(_topDiscoveryCount).toList();
 
       final rebuilt = <HomeSectionConfig>[];
       for (var i = 0; i < enabledOthers.length; i++) {
@@ -293,6 +325,7 @@ class DadflixFeedService {
       for (final c in [...fresh, ...topDiscovery, ...restDiscovery]) {
         if (!rebuilt.contains(c)) rebuilt.add(c);
       }
+      rebuilt.addAll(hiddenDiscovery);
       rebuilt.addAll(disabledOthers);
 
       for (var i = 0; i < rebuilt.length; i++) {

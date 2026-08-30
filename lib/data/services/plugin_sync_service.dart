@@ -1834,12 +1834,19 @@ class PluginSyncService extends ChangeNotifier {
       'mdblistRatingSources': _csvToList(UserPreferences.enabledRatings)
           .map((s) => _clientToServerRatingSource[s] ?? s)
           .toList(),
+      // dadflix: Moonbase profili 3 webOS TV ile PAYLASILIYOR. Dadflix
+      // lane'leri ve yerlesimimiz cihaz-yerel kalmali; giden yuke karisirsa
+      // TV'lerin ev ekrani bozulur ve push-pull savasi baslar (konsey P0,
+      // 2026-08-31). Dinamik satirlar homeRowOrder'da zaten 'none' olarak
+      // serilesip cop uretiyordu; onlari da disarida birakiyoruz.
       'homeRowOrder': _prefs.homeSectionsConfig
-          .where((c) => c.enabled)
+          .where((c) => c.enabled && !c.isPluginDynamic)
           .map((c) => c.type.serializedName)
           .toList(),
-      'homeSections':
-          _prefs.homeSectionsConfig.map((c) => c.toJson()).toList(),
+      'homeSections': _prefs.homeSectionsConfig
+          .where((c) => !(c.pluginSection ?? '').startsWith('dadflix_feed:'))
+          .map((c) => c.toJson())
+          .toList(),
       'seerrRows': {
         'rowOrder': _seerrPrefs.activeRows
             .map((t) => t.serializedName)
