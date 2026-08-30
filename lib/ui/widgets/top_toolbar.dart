@@ -1073,6 +1073,24 @@ class _TopToolbarState extends State<TopToolbar> with RouteAware {
                   ),
                 ),
               ],
+              // dadflix: Live TV her zaman toolbar'da ayri ikon olarak gorunur
+              // (kutuphaneler menusunde gomulu kalmasin diye; pref eklemiyoruz
+              // ki upstream user_preferences.dart'a dokunulmasin).
+              _gap(),
+              _orderButton(
+                order: (order++).toDouble(),
+                child: ExpandableIconButton(
+                  key: const ValueKey('toolbar_livetv'),
+                  forceExpanded: alwaysExpanded,
+                  icon: Icons.live_tv_rounded,
+                  label: l10n.liveTv,
+                  baseColor: nextNavColor(),
+                  onPressed: () {
+                    if (_isActive(Destinations.liveTvGuide)) return;
+                    context.navigateTopLevel(Destinations.liveTvGuide);
+                  },
+                ),
+              ),
               if (showSeerr) ...[
                 _gap(),
                 _orderButton(

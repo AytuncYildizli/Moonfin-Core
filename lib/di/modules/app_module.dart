@@ -1,3 +1,6 @@
+// dadflix: izole katman importlari
+import '../../dadflix/dadflix_api.dart';
+import '../../dadflix/dadflix_preferences.dart';
 import 'package:get_it/get_it.dart';
 import 'package:jellyfin_preference/jellyfin_preference.dart';
 import 'package:playback_core/playback_core.dart';
@@ -147,6 +150,14 @@ void registerAppModule() {
       _getIt<SessionRepository>(),
     ),
   );
+  // dadflix: denizevi brain tercihleri + istemcisi (SeerrPreferences deseni)
+  _getIt.registerLazySingleton(
+    () => DadflixPreferences(
+      _getIt<PreferenceStore>(),
+      _getIt<SessionRepository>(),
+    ),
+  );
+  _getIt.registerLazySingleton(() => DadflixApi(_getIt<DadflixPreferences>()));
   _getIt.registerLazySingleton<PendingRatingStore>(
     () => PendingRatingStore(_getIt<PreferenceStore>()),
   );

@@ -1,3 +1,6 @@
+// dadflix:
+import '../../../dadflix/dadflix_api.dart';
+import '../../../dadflix/dadflix_preferences.dart';
 import 'dart:async';
 import 'dart:ui';
 
@@ -6669,11 +6672,33 @@ class DetailActionButtonsState extends State<DetailActionButtons> {
         return null;
       }
 
-      primaryAction = requestSlot(false) ?? requestSlot(true) ?? cancelSlot();
+      // dadflix: kutuphanede olmayan filmde debrid aninda-oynatma one gecer;
+      // Request butonu ikincil sirada kalir.
+      final debridPlay = _dadflixDebridButton(
+        context,
+        seerr,
+        isPrimary: true,
+        focusNode: _tvPlayFocusNode,
+        autofocus: autofocusPlay,
+      );
+      primaryAction = debridPlay ?? requestSlot(false) ?? requestSlot(true) ?? cancelSlot();
+      if (debridPlay != null) {
+        final requestAgain = _seerrRequestButton(
+          context,
+          seerr,
+          l10n,
+          is4k: false,
+          qualityToggle: true,
+          isPrimary: false,
+        );
+        if (requestAgain != null) {
+          byButton[DetailButton.seerrRequest] = requestAgain;
+        }
+      }
       byButton.removeWhere(
         (button, _) =>
             !button.availableInSeerrOnly ||
-            button == DetailButton.seerrRequest,
+            (button == DetailButton.seerrRequest && debridPlay == null),
       );
     } else {
       primaryAction = playButton;
@@ -12712,6 +12737,101 @@ class _EpisodeProgressBar extends StatelessWidget {
 
 /// The request slot for one quality track: Request or Request More, and
 /// nothing when there is nothing left to ask for on that track.
+// dadflix: kutuphanede olmayan FILM icin debrid aninda-oynatma butonu.
+// Dizi destegi (bolum secimi) sonraki iterasyonda; simdilik film-only.
+Widget? _dadflixDebridButton(
+  BuildContext context,
+  SeerrMediaDetailViewModel? seerr, {
+  bool isPrimary = false,
+  FocusNode? focusNode,
+  bool autofocus = false,
+}) {
+  if (seerr == null) return null;
+  final state = seerr.state;
+  if (!state.isMovie) return null;
+  if (state.isAvailableAnyQuality) return null;
+  final prefs = GetIt.instance<DadflixPreferences>();
+  if (!prefs.isConfigured) return null;
+  return _DetailActionButton(
+    label: 'Şimdi izle',
+    icon: Icons.flash_on,
+    isPrimary: isPrimary,
+    focusNode: focusNode,
+    autofocus: autofocus,
+    onPressed: () => unawaited(_dadflixStartDebrid(context, state)),
+  );
+}
+
+Future<void> _dadflixStartDebrid(
+  BuildContext context,
+  SeerrMediaDetailState state,
+) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  void toast(String msg) =>
+      messenger?.showSnackBar(SnackBar(content: Text(msg)));
+
+  print('dadflix: debrid basladi');
+  toast('Debrid kaynağı aranıyor…');
+  final api = GetIt.instance<DadflixApi>();
+  final date = state.releaseDate ?? state.firstAirDate;
+  final year = date != null && date.length >= 4
+      ? int.tryParse(date.substring(0, 4))
+      : null;
+  final result = await api.playDebrid(
+    tmdbId: state.tmdbId,
+    imdbId: state.externalIds?.imdbId,
+    mediaType: 'movie',
+    title: state.displayTitle,
+    year: year,
+  );
+  print('dadflix: sonuc granted=${result?.granted} url=${result?.url != null}');
+  if (!context.mounted) return;
+  if (result == null) {
+    toast('Debrid kaynağı bulunamadı — istek akışını kullanabilirsin.');
+    return;
+  }
+  if (!result.granted) {
+    toast('Kaynak hazırlanıyor (TorBox). Birkaç dakika sonra tekrar dene.');
+    return;
+  }
+
+  final item = AggregatedItem(
+    id: 'debrid:tmdb:${state.tmdbId}',
+    serverId: 'debrid',
+    rawData: {
+      'Name': state.displayTitle,
+      'Type': 'Movie',
+      'MediaType': 'Video',
+      'ProviderIds': {
+        'Tmdb': '${state.tmdbId}',
+        if (state.externalIds?.imdbId != null)
+          'Imdb': state.externalIds!.imdbId,
+      },
+      if (state.runtime != null) 'RunTimeTicks': state.runtime! * 600000000,
+      'MediaSources': const <dynamic>[],
+      'MediaStreams': const <dynamic>[],
+      'UserData': const {'Played': false, 'PlaybackPositionTicks': 0},
+      'DadflixStreamUrl': result.url,
+      if (result.subtitleUrl != null) 'DadflixSubtitleUrl': result.subtitleUrl,
+    },
+  );
+
+  print('dadflix: oynatici aciliyor');
+  final manager = GetIt.instance<PlaybackManager>();
+  await launchPlayerWhilePreparing(
+    context,
+    manager: manager,
+    destination: Destinations.videoPlayer,
+    startPlayback: (session) => runPlaybackStart(
+      session,
+      () async {
+        await manager.playItems([item]);
+        return true;
+      },
+    ),
+  );
+}
+
 Widget? _seerrRequestButton(
   BuildContext context,
   SeerrMediaDetailViewModel? seerr,

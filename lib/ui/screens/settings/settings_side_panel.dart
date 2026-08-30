@@ -1,3 +1,5 @@
+// dadflix:
+import '../../../dadflix/dadflix_settings_screen.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -295,6 +297,13 @@ class _SettingsSidePanelState extends ConsumerState<SettingsSidePanel> {
         title: l10n.integrations,
         subtitle: l10n.settingsIntegrationsSubtitle,
         onTap: () => context.pushSettingsScreen(const _IntegrationsScreen()),
+      ),
+      // dadflix: denizevi brain ayarlari
+      _PanelEntry(
+        icon: Icons.auto_awesome,
+        title: 'Dadflix Brain',
+        subtitle: 'Debrid anında oynatma ve akıllı özellikler',
+        onTap: () => context.pushSettingsScreen(const DadflixSettingsScreen()),
       ),
       if (_showThemeEditorEntry)
         _PanelEntry(

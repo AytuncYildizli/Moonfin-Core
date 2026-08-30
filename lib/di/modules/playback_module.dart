@@ -1,3 +1,5 @@
+// dadflix:
+import '../../dadflix/debrid_first_media_stream_resolver.dart';
 import 'package:get_it/get_it.dart';
 import 'package:playback_core/playback_core.dart';
 import 'package:playback_jellyfin/playback_jellyfin.dart';
@@ -751,9 +753,12 @@ void setActiveStreamResolver(MediaServerClient client) {
   // Local-first: completed downloads play from disk instead of streaming,
   // with progress mirrored to the downloads DB (and to the server when
   // reachable).
-  final resolver = LocalFirstMediaStreamResolver(
-    inner: serverResolver,
-    offline: _getIt<OfflineStreamResolver>(),
+  // dadflix: debrid item'lari (serverId=='debrid') gomulu URL'den oynatilir
+  final resolver = DebridFirstMediaStreamResolver(
+    inner: LocalFirstMediaStreamResolver(
+      inner: serverResolver,
+      offline: _getIt<OfflineStreamResolver>(),
+    ),
   );
   final service = LocalAwarePlayerService(
     serverService,
