@@ -42,6 +42,11 @@ class DadflixPreferences {
   Future<void> setLayoutVersion(int value) =>
       _store.setInt(_userKey('layout_version'), value);
 
+  /// Uygulanan tek-seferlik varsayilan seti surumu.
+  int get defaultsVersion => _store.getInt(_userKey('defaults_version')) ?? 0;
+  Future<void> setDefaultsVersion(int value) =>
+      _store.setInt(_userKey('defaults_version'), value);
+
   /// Concierge servisi adresi (verdict yazma yolu).
   String get conciergeUrl =>
       _store.getString(_userKey('concierge_url')) ??

@@ -193,6 +193,7 @@ class DadflixFeedService {
       if (added > 0) {
         await prefs.setHomeSectionsConfig(configs);
       }
+      await _applyDadflixDefaults();
       // Yerlesimi uygula (senkron dibe atmis olabilir).
       await enforceLayout();
       print('dadflix: feed satirlari eklendi=$added toplam=${configs.length}');
@@ -338,6 +339,24 @@ class DadflixFeedService {
       print('dadflix: yerlesim hatasi: $e');
     } finally {
       _enforcing = false;
+    }
+  }
+
+  /// Tek seferlik Dadflix varsayilanlari. Kullanici sonradan degistirirse
+  /// tekrar ezilmez (surum bayragi). Yeni stick'lerde ayni davranis icin
+  /// kurulumdan sonra kendiliginden uygulanir.
+  Future<void> _applyDadflixDefaults() async {
+    if (_prefs.defaultsVersion >= 1) return;
+    try {
+      final prefs = GetIt.instance<UserPreferences>();
+      // Outro'da "Skip Outro" butonu yerine dogrudan "Sirada" karti cikar
+      // (kullanici istegi 2026-08-31): jenerikte tek is siradaki bolume
+      // gecmek; ayri bir atlama butonu gereksiz.
+      await prefs.set(UserPreferences.replaceSkipOutroWithNextUp, true);
+      await _prefs.setDefaultsVersion(1);
+      print('dadflix: varsayilanlar uygulandi (outro -> Sirada)');
+    } catch (e) {
+      print('dadflix: varsayilan hatasi: $e');
     }
   }
 }
