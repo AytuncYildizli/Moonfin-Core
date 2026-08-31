@@ -4671,6 +4671,12 @@ class _ContentRowsState extends State<_ContentRows>
             showContextMenu(context, item, onChanged: () => setState(() {})),
         onTap: (_, item) {
           _finishSharedPreview(releaseResources: true);
+          // dadflix: kanal satirindaki karta basmak "yayina katilmak"tir —
+          // program baştan degil, CANLI saniyesinden acilir.
+          if (row.title.startsWith('📺 Dadflix Kanalı')) {
+            context.navigateTopLevel(Destinations.dadflixChannel);
+            return;
+          }
           if (row.rowType == HomeRowType.libraryTiles) {
             _navigateToLibrary(context, item);
           } else if (row.rowType == HomeRowType.genres && row.id == 'genres') {

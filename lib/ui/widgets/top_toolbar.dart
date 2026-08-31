@@ -1073,6 +1073,22 @@ class _TopToolbarState extends State<TopToolbar> with RouteAware {
                   ),
                 ),
               ],
+              // dadflix: evin kendi TV kanali — "ac ve otur"
+              _gap(),
+              _orderButton(
+                order: (order++).toDouble(),
+                child: ExpandableIconButton(
+                  key: const ValueKey('toolbar_dadflix_channel'),
+                  forceExpanded: alwaysExpanded,
+                  icon: Icons.tv_rounded,
+                  label: 'Kanal',
+                  baseColor: nextNavColor(),
+                  onPressed: () {
+                    if (_isActive(Destinations.dadflixChannel)) return;
+                    context.navigateTopLevel(Destinations.dadflixChannel);
+                  },
+                ),
+              ),
               // dadflix: spor sayfasi
               _gap(),
               _orderButton(

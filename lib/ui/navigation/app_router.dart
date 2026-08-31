@@ -1,4 +1,5 @@
 // dadflix:
+import '../../dadflix/dadflix_channel_screen.dart';
 import '../../dadflix/dadflix_sports_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
@@ -234,6 +235,11 @@ final appRouter = GoRouter(
     GoRoute(
       path: Destinations.dadflixSports,
       builder: (context, state) => const DadflixSportsScreen(),
+    ),
+    // dadflix: evin kendi TV kanali
+    GoRoute(
+      path: Destinations.dadflixChannel,
+      builder: (context, state) => const DadflixChannelScreen(),
     ),
     // Auth
     GoRoute(

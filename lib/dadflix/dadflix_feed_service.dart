@@ -6,8 +6,13 @@ import 'package:get_it/get_it.dart';
 import '../data/models/aggregated_item.dart';
 import '../data/models/home_row.dart';
 import '../preference/home_section_config.dart';
+import '../preference/preference_constants.dart';
 import '../preference/user_preferences.dart';
 import '../ui/navigation/home_refresh_bus.dart';
+import 'package:get_it/get_it.dart' as gi;
+import 'package:server_core/server_core.dart';
+
+import 'dadflix_channel.dart';
 import 'dadflix_preferences.dart';
 
 /// dadflix: denizevi-ai ev feed'ini (:8892 /api/feed/home) ana ekran
@@ -22,6 +27,9 @@ import 'dadflix_preferences.dart';
 /// butonu devrededir.
 class DadflixFeedService {
   static const _sectionPrefix = 'dadflix_feed:';
+
+  /// Kanal satiri: ana ekranin EN USTU. "Ac ve otur" ancak burada anlamli.
+  static const channelSection = '${_sectionPrefix}__channel__';
 
   final DadflixPreferences _prefs;
   late final Dio _dio = Dio(
@@ -93,6 +101,9 @@ class DadflixFeedService {
     required String section,
     bool forceRefresh = false,
   }) async {
+    if (section == channelSection) {
+      return _loadChannelRow(rowId);
+    }
     final feedRowId = section.substring(_sectionPrefix.length);
     final feed = await _feed(forceRefresh: forceRefresh);
     final row = feed == null ? null : _rowJson(feed, feedRowId);
@@ -135,6 +146,43 @@ class DadflixFeedService {
     );
   }
 
+  /// Kanal satiri: su an yayindaki program + sirada gelenler. Kartlar gercek
+  /// Jellyfin item'lari oldugu icin posterler/ilerleme bedavaya gelir.
+  Future<HomeRow> _loadChannelRow(String rowId) async {
+    final ch = gi.GetIt.instance<DadflixChannel>();
+    final now = await ch.now();
+    if (now == null) {
+      return HomeRow(
+        id: rowId,
+        title: 'Dadflix Kanalı',
+        rowType: HomeRowType.pluginDynamic,
+      );
+    }
+    final grid = await ch.schedule();
+    final idx = grid.indexWhere((e) => e.itemId == now.itemId);
+    final upcoming = idx >= 0 ? grid.skip(idx).take(6).toList() : const <ChannelEntry>[];
+    final client = gi.GetIt.instance<MediaServerClient>();
+    final items = <AggregatedItem>[];
+    for (final e in upcoming.isEmpty
+        ? [ChannelEntry(itemId: now.itemId, title: now.title, daypart: now.daypart)]
+        : upcoming) {
+      try {
+        final raw = await client.userLibraryApi.getItem(e.itemId);
+        items.add(AggregatedItem(
+          id: e.itemId,
+          serverId: client.baseUrl,
+          rawData: Map<String, dynamic>.from(raw),
+        ));
+      } catch (_) {}
+    }
+    return HomeRow(
+      id: rowId,
+      title: '📺 Dadflix Kanalı · CANLI: ${now.displayTitle}',
+      rowType: HomeRowType.pluginDynamic,
+      items: items,
+    );
+  }
+
   /// Uygulama acilisinda bir kez: feed'deki TUM satirlari Home Sections'a
   /// (yoksa) ekler. Kisisel satir one, kesif satirlari mevcutlarin arkasina.
   /// Anahtar yapilandirilmamissa hicbir sey yapmaz.
@@ -172,6 +220,9 @@ class DadflixFeedService {
         );
         added++;
       }
+
+      // Kanal satiri her zaman en uste.
+      add('__channel__', 'Dadflix Kanalı', 0);
 
       final freshRow = feed['freshRow'];
       if (freshRow is Map<String, dynamic> && freshRow['id'] is String) {
@@ -293,9 +344,11 @@ class DadflixFeedService {
           .toList();
       final enabledOthers = others.where((c) => c.enabled).toList();
       final disabledOthers = others.where((c) => !c.enabled).toList();
+      final channel = ours.where((c) => c.pluginSection == channelSection);
       final fresh = ours.where((c) => c.pluginSection == _freshRowSection);
       final discovery = ours
-          .where((c) => c.pluginSection != _freshRowSection)
+          .where((c) => c.pluginSection != _freshRowSection &&
+              c.pluginSection != channelSection)
           .toList();
 
       // Konsey (Grok/GLM 2026-08-31): 23 lane 10-foot arayuzde fazla; odak
@@ -316,6 +369,7 @@ class DadflixFeedService {
       final restDiscovery = visibleDiscovery.skip(_topDiscoveryCount).toList();
 
       final rebuilt = <HomeSectionConfig>[];
+      rebuilt.addAll(channel); // slot 0: kanal
       for (var i = 0; i < enabledOthers.length; i++) {
         if (i == _freshSlot) rebuilt.addAll(fresh);
         if (i == _topDiscoverySlot) rebuilt.addAll(topDiscovery);
@@ -323,7 +377,7 @@ class DadflixFeedService {
         rebuilt.add(enabledOthers[i]);
       }
       // Acik built-in sayisi slot'lardan azsa kalanlari sona ekle.
-      for (final c in [...fresh, ...topDiscovery, ...restDiscovery]) {
+      for (final c in [...channel, ...fresh, ...topDiscovery, ...restDiscovery]) {
         if (!rebuilt.contains(c)) rebuilt.add(c);
       }
       rebuilt.addAll(hiddenDiscovery);
@@ -346,15 +400,29 @@ class DadflixFeedService {
   /// tekrar ezilmez (surum bayragi). Yeni stick'lerde ayni davranis icin
   /// kurulumdan sonra kendiliginden uygulanir.
   Future<void> _applyDadflixDefaults() async {
-    if (_prefs.defaultsVersion >= 1) return;
+    if (_prefs.defaultsVersion >= 2) return;
     try {
       final prefs = GetIt.instance<UserPreferences>();
       // Outro'da "Skip Outro" butonu yerine dogrudan "Sirada" karti cikar
       // (kullanici istegi 2026-08-31): jenerikte tek is siradaki bolume
       // gecmek; ayri bir atlama butonu gereksiz.
       await prefs.set(UserPreferences.replaceSkipOutroWithNextUp, true);
-      await _prefs.setDefaultsVersion(1);
-      print('dadflix: varsayilanlar uygulandi (outro -> Sirada)');
+      // Ana ekrandaki Live TV kutucuk satiri (Guide/Recordings/Schedule/
+      // Series) kaldirilir: evde DVR kullanilmiyor, rehber zaten navbar'daki
+      // Live TV ikonunda. "On Now" ve "Favorite Channels" satirlari kalir.
+      final sections = List<HomeSectionConfig>.from(prefs.homeSectionsConfig);
+      var touched = false;
+      for (var i = 0; i < sections.length; i++) {
+        if (sections[i].isBuiltin &&
+            sections[i].type == HomeSectionType.liveTv &&
+            sections[i].enabled) {
+          sections[i] = sections[i].copyWith(enabled: false);
+          touched = true;
+        }
+      }
+      if (touched) await prefs.setHomeSectionsConfig(sections);
+      await _prefs.setDefaultsVersion(2);
+      print('dadflix: varsayilanlar uygulandi (outro -> Sirada, LiveTV kutucuklari kapali)');
     } catch (e) {
       print('dadflix: varsayilan hatasi: $e');
     }

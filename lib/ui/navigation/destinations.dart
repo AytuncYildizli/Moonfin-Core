@@ -101,6 +101,7 @@ class Destinations {
   static const liveTvPlayer = '/live-tv/player';
   // dadflix:
   static const dadflixSports = '/dadflix/sports';
+  static const dadflixChannel = '/dadflix/channel';
 
   // Playback
   static const videoPlayer = '/player/video';

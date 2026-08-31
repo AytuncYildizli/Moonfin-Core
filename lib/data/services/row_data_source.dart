@@ -144,21 +144,124 @@ class RowDataSource {
       limit: _defaultLimit,
       isAiring: true,
     );
+    // dadflix: sunucunun "Recommended" siralamasi ev halkinin gercekte actigi
+    // kanallari one almiyor (rastgele tanitim/muzik kanallari doluyor).
+    // FAVORI kanallarin su anki programlarini basa aliyoruz.
+    final items = await _dadflixFavoritesFirst(response);
     return _buildRow(
       id: 'liveTvOnNow',
       title: _l10n.onNow,
-      response: response,
+      response: items,
       serverId: serverId,
       rowType: HomeRowType.liveTvOnNow,
     );
   }
 
+  /// dadflix: favori kanallarin su an yayindaki programlarini listenin basina
+  /// tasir; kalanini sunucunun onerisiyle doldurur. Hata halinde orijinal
+  /// cevabi aynen dondurur (On Now satiri asla bos kalmaz).
+  Future<Map<String, dynamic>> _dadflixFavoritesFirst(
+    Map<String, dynamic> fallback,
+  ) async {
+    try {
+      final chans = await _client.liveTvApi.getChannels(
+        limit: 600,
+        fields: 'UserData',
+        userId: _client.userId,
+      );
+      final favIds = <String>[
+        for (final c in (chans['Items'] as List? ?? const []))
+          if (c is Map<String, dynamic> &&
+              ((c['UserData'] as Map?)?['IsFavorite'] == true))
+            c['Id'] as String,
+      ];
+      if (favIds.isEmpty) return fallback;
+      final now = DateTime.now().toUtc();
+      final guide = await _client.liveTvApi.getGuide(
+        startDate: now,
+        endDate: now.add(const Duration(minutes: 1)),
+        channelIds: favIds,
+        fields: 'ChannelInfo',
+        enableImages: true,
+        enableUserData: true,
+        userId: _client.userId,
+      );
+      final favPrograms = (guide['Items'] as List? ?? const []).toList();
+      if (favPrograms.isEmpty) return fallback;
+      final seen = <String>{
+        for (final p in favPrograms)
+          if (p is Map<String, dynamic>) (p['ChannelId'] as String?) ?? '',
+      };
+      final rest = [
+        for (final p in (fallback['Items'] as List? ?? const []))
+          if (p is Map<String, dynamic> &&
+              !seen.contains((p['ChannelId'] as String?) ?? ''))
+            p,
+      ];
+      return {
+        ...fallback,
+        'Items': [...favPrograms, ...rest],
+      };
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  /// dadflix: gizlenen kutuphanelerdeki "devam edenler" kayitlarini genel
+  /// listeye kat. Son oynatma tarihine gore sirala, kimlige gore tekille.
+  Future<Map<String, dynamic>> _dadflixMergeHiddenResume(
+    Map<String, dynamic> base,
+    int? startIndex,
+  ) async {
+    if ((startIndex ?? 0) > 0) return base; // sayfalamada karistirma
+    try {
+      final views = await _client.userViewsApi.getUserViews();
+      final items = List<dynamic>.from(base['Items'] as List? ?? const []);
+      final seen = <String>{
+        for (final i in items)
+          if (i is Map<String, dynamic>) (i['Id'] as String?) ?? '',
+      };
+      for (final v in (views['Items'] as List? ?? const [])) {
+        if (v is! Map<String, dynamic>) continue;
+        final type = v['CollectionType'] as String?;
+        if (type != 'movies' && type != 'tvshows') continue;
+        final extra = await _getResumeItemsWithFallback(
+          parentId: v['Id'] as String?,
+          includeItemTypes: ['Movie', 'Episode'],
+          limit: _defaultLimit,
+        );
+        for (final i in (extra['Items'] as List? ?? const [])) {
+          if (i is! Map<String, dynamic>) continue;
+          final id = (i['Id'] as String?) ?? '';
+          if (id.isEmpty || seen.contains(id)) continue;
+          seen.add(id);
+          items.add(i);
+        }
+      }
+      DateTime played(dynamic i) {
+        final raw = ((i as Map)['UserData'] as Map?)?['LastPlayedDate'] as String?;
+        return DateTime.tryParse(raw ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+      }
+
+      items.sort((a, b) => played(b).compareTo(played(a)));
+      return {...base, 'Items': items.take(_defaultLimit).toList()};
+    } catch (_) {
+      return base;
+    }
+  }
+
   Future<HomeRow> loadResume(String serverId, {int? startIndex}) async {
-    final response = await _getResumeItemsWithFallback(
+    var response = await _getResumeItemsWithFallback(
       includeItemTypes: ['Movie', 'Episode'],
       startIndex: startIndex,
       limit: _defaultLimit,
     );
+    // dadflix: Jellyfin'in GENEL "devam edenler" sorgusu, kullanicinin
+    // LatestItemsExcludes listesindeki kutuphaneleri (bizde IPTV Filmler /
+    // IPTV Diziler) atliyor. Sonuc: IPTV kutuphanesinden izlenen bir dizi
+    // (Black Bird, 2026-08-31'de dogrulandi: ilerleme kayitli ama satirda yok)
+    // asla gorunmuyordu. Kutuphane bazli sorgulari birlestirip kapatiyoruz.
+    response = await _dadflixMergeHiddenResume(response, startIndex);
     return _buildRow(
       id: 'resume',
       title: _l10n.continueWatching,
